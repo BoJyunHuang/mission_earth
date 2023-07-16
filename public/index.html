@@ -15,14 +15,20 @@
         #lmap {
             height: 100%;
         }
+
+        #arrow-container {
+            z-index: 1001;
+        }
     </style>
 </head>
 
 <body>
     <div id="lmap"></div>
+    <div id="arrow-container"></div>
     <div class="absolute">
-        <button id="windButton" onclick="toggleWindMap()">显示风向</button>
+        <button id="tempButton" onclick="toggleTempMap()">顯示溫度</button>
         <button id="rainButton" onclick="toggleRainMap()">显示雨量</button>
+        <button id="d3Button" onclick="toggleD3()">D3</button>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
@@ -53,8 +59,11 @@
                     const lat = parseFloat(location.lat);
                     const lon = parseFloat(location.lon);
                     const temperature = parseFloat(location.weatherElement.find(element => element.elementName === 'TEMP').elementValue);
-
-                    return { lat, lon, temperature };
+                    const wdir = parseFloat(location.weatherElement.find(element => element.elementName === 'WDIR').elementValue);
+                    const wdsd = parseFloat(location.weatherElement.find(element => element.elementName === 'WDSD').elementValue);
+                    const pres = parseFloat(location.weatherElement.find(element => element.elementName === 'PRES').elementValue);
+                    const precipitation = parseFloat(location.weatherElement.find(element => element.elementName === 'H_24R').elementValue);
+                    return { lat, lon, temperature, wdir, wdsd, pres, precipitation };
                 });
             })
             .catch(error => {
@@ -82,17 +91,58 @@
         let marker = null
         let heatmapLayer = null
         let temperatureMarkers = [];
-        function toggleWindMap() {
-            if (heatmapLayer) {
-                LMap.removeLayer(heatmapLayer);
-                heatmapLayer = null;
-            }
-            if (temperatureMarkers) {
-                temperatureMarkers.forEach(marker => {
-                    LMap.removeLayer(marker);
+        let svgContainer = null
+
+        function toggleD3() {
+            clear()
+            // 创建 SVG 容器
+            svgContainer = d3.select(LMap.getPanes().overlayPane)
+                .append('svg')
+                .attr('class', 'arrow-container')
+                .attr('width', LMap.getSize().x)
+                .attr('height', LMap.getSize().y);
+
+            // 创建箭头和线段
+            const arrows = svgContainer.selectAll('.arrow')
+                .data(temperatureData)
+                .enter()
+                .append('g')
+                .attr('class', 'arrow');
+
+            arrows.append('path')
+                .attr('d', 'M0,-5L10,0L0,5')
+                .attr('stroke', 'red')
+                .attr('fill', 'red')
+                .attr('stroke-width', d => d.wdsd); // 使用 size 属性控制箭头的大小
+
+            arrows.append('line')
+                .attr('x1', 0)
+                .attr('y1', 0)
+                .attr('x2', -20) // 线段长度
+                .attr('y2', 0)
+                .attr('stroke', 'red')
+                .attr('stroke-width', d => d.wdsd); // 使用 size 属性控制线段的大小
+
+            // 更新箭头位置和旋转角度
+            function updateArrows() {
+                arrows.attr('transform', d => {
+                    const latLng = L.latLng(d.lat, d.lon);
+                    const point = LMap.latLngToLayerPoint(latLng);
+                    const x = point.x;
+                    const y = point.y;
+                    return `translate(${x},${y}) rotate(${d.wdir})`;
                 });
-                temperatureMarkers = [];
             }
+
+            // 初始化箭头位置
+            updateArrows();
+
+            // 监听地图缩放事件，更新箭头位置
+            LMap.on('zoomend', updateArrows);
+        }
+
+        function toggleTempMap() {
+            clear()
             temperatureData.forEach(dataPoint => {
                 marker = L.circleMarker([dataPoint.lat, dataPoint.lon], {
                     radius: 5,
@@ -109,16 +159,7 @@
 
         // 顯示降雨量
         function toggleRainMap() {
-            if (heatmapLayer) {
-                LMap.removeLayer(heatmapLayer);
-                heatmapLayer = null;
-            }
-            if (temperatureMarkers) {
-                temperatureMarkers.forEach(marker => {
-                    LMap.removeLayer(marker);
-                });
-                temperatureMarkers = [];
-            }
+            clear()
             const option = {
                 "scaleRadius": false,
                 "radius": 50,
@@ -137,11 +178,24 @@
             heatmapLayer.addTo(LMap);
         }
 
-        const windButton = document.getElementById('windButton');
-        const rainButton = document.getElementById('rainButton');
+        // 清除之前圖層
+        function clear() {
+            if (heatmapLayer) {
+                LMap.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+            if (temperatureMarkers) {
+                temperatureMarkers.forEach(marker => {
+                    LMap.removeLayer(marker);
+                });
+                temperatureMarkers = [];
+            }
+            if (svgContainer) {
+                svgContainer.remove();
+                svgContainer = null;
+            }
+        }
 
-        windButton.addEventListener('click', toggleWindMap);
-        rainButton.addEventListener('click', toggleRainMap);
     </script>
 
 </body>

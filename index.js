@@ -1,5 +1,6 @@
 const express = require('express');
 const app = express();
+const d3 = import('d3');
 
 // 设置静态文件目录
 app.use(express.static('public'));
