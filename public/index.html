@@ -2,8 +2,9 @@
 <html>
 
 <head>
-    <title>Leaflet Map</title>
+    <title>Weather Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="nouislider.min.css" />
     <style>
         html,
         body {
@@ -19,6 +20,28 @@
         #arrow-container {
             z-index: 1001;
         }
+
+        #slider {
+            height: 10px;
+            margin-top: 5px;
+        }
+
+        #slider .noUi-connect {
+            background: #c0392b;
+        }
+
+        #slider .noUi-handle {
+            height: 18px;
+            width: 18px;
+            top: -5px;
+            right: -9px;
+            /* half the width */
+            border-radius: 9px;
+        }
+
+        #temperature-bar {
+            z-index: 1002;
+        }
     </style>
 </head>
 
@@ -26,62 +49,107 @@
     <div id="lmap"></div>
     <div id="arrow-container"></div>
     <div class="absolute">
-        <button id="tempButton" onclick="toggleTempMap()">顯示溫度</button>
-        <button id="rainButton" onclick="toggleRainMap()">显示雨量</button>
-        <button id="d3Button" onclick="toggleD3()">D3</button>
+        <div id="temperature-bar"></div>
+        <p>單日資料</p>
+        <div>
+            <button id="tempButton" onclick="toggleMap()">測站資訊</button>
+            <button id="rainButton" onclick="toggleRain()">雨量</button>
+            <button id="d3Button" onclick="toggleWind()">風向</button>
+        </div>
+        <p>月份資料 以溫度為範例</p>
+        <div id="slider"></div>
+        <p id="date"></p>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://unpkg.com/heatmap.js/build/heatmap.min.js"></script>
     <script src="https://unpkg.com/heatmap.js/plugins/leaflet-heatmap/leaflet-heatmap.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="nouislider.min.js"></script>
 
     <script>
         // 下載地圖
         const LMap = L.map(document.getElementById('lmap'), {
             center: [23.5, 121],
-            zoom: 10,
+            zoom: 8,
             crs: L.CRS.EPSG3857,
         });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18,
+            maxZoom: 10,
             id: 'mapbox.streets'
         }).addTo(LMap);
-
+        // 使用 Ajax 方法加载 GeoJSON 数据
+        let geoData = null
+        fetch('Taiwan.json')
+            .then(response => response.json())
+            .then(geojsonData => {
+                geoData = geojsonData
+                getMonthData()
+            })
+            .catch(error => {
+                console.error('Error loading GeoJSON data:', error);
+            });
         // 下載氣候數據
-        let temperatureData = []
+        let monthData = []
+        let monthDate = {}
+        function getMonthData() {
+            fetch('month_weather.json')
+                .then(response => response.json())
+                .then(data => {
+                    monthDate = data.cwbdata.resources.resource.metadata.temporal
+                    monthDate.startTime = monthDate.startTime.split('T')[0]
+                    monthDate.endTime = monthDate.endTime.split('T')[0]
+                    monthData = data.cwbdata.resources.resource.data.surfaceObs.location.map(e => {
+                        const id = e.station.StationID;
+                        const tempData = e.stationObsStatistics.AirTemperature.daily
+                        return { id, tempData };
+                    });
+                    plusCoordinate()
+                    buildSlider()
+                })
+                .catch(error => {
+                    console.error('Error loading JSON:', error);
+                });
+        }
+        // 測站資料
+        function plusCoordinate() {
+            fetch('station.json')
+                .then(response => response.json())
+                .then(data => {
+                    monthData = monthData.map(i => ({
+                        ...i,
+                        lat: parseFloat((matchingItem => matchingItem ? matchingItem.StationLatitude : null)(
+                            data.cwbdata.resources.resource.data.stationsStatus.station.find(item => item.StationID === i.id)
+                        )),
+                        lon: parseFloat((matchingItem => matchingItem ? matchingItem.StationLongitude : null)(
+                            data.cwbdata.resources.resource.data.stationsStatus.station.find(item => item.StationID === i.id)
+                        )),
+                    }));
+                })
+                .catch(error => {
+                    console.error('Error loading JSON:', error);
+                });
+        }
+        // 下載無人測站數據
+        let oneDayData = []
         fetch('weather.json')
             .then(response => response.json())
             .then(data => {
-                const locations = data.records.location;
-
-                temperatureData = locations.map(location => {
-                    const lat = parseFloat(location.lat);
-                    const lon = parseFloat(location.lon);
-                    const temperature = parseFloat(location.weatherElement.find(element => element.elementName === 'TEMP').elementValue);
-                    const wdir = parseFloat(location.weatherElement.find(element => element.elementName === 'WDIR').elementValue);
-                    const wdsd = parseFloat(location.weatherElement.find(element => element.elementName === 'WDSD').elementValue);
-                    const pres = parseFloat(location.weatherElement.find(element => element.elementName === 'PRES').elementValue);
-                    const precipitation = parseFloat(location.weatherElement.find(element => element.elementName === 'H_24R').elementValue);
-                    return { lat, lon, temperature, wdir, wdsd, pres, precipitation };
-                });
-            })
-            .catch(error => {
-                console.error('Error loading JSON:', error);
-            });
-
-        // 下載降雨量數據
-        let arr = [];
-        fetch('precipitation.json')
-            .then(response => response.json())
-            .then(data => {
-                // 建立新陣列
-                arr = data.records.location.map(location => {
-                    return {
-                        lat: parseFloat(location.lat),
-                        lon: parseFloat(location.lon),
-                        value: parseFloat(location.weatherElement.find(element => element.elementName === 'RAIN').elementValue)
-                    };
+                oneDayData = data.records.location.map(e => {
+                    const name = e.locationName
+                    const city = e.parameter.find(element => element.parameterName === 'CITY').parameterValue
+                    const town = e.parameter.find(element => element.parameterName === 'TOWN').parameterValue
+                    const elev = e.weatherElement.find(element => element.elementName === 'ELEV').elementValue
+                    const weather = e.weatherElement.find(element => element.elementName === 'Weather').elementValue
+                    const lat = parseFloat(e.lat);
+                    const lon = parseFloat(e.lon);
+                    const tempe = parseFloat(e.weatherElement.find(element => element.elementName === 'TEMP').elementValue);
+                    const wdir = parseFloat(e.weatherElement.find(element => element.elementName === 'WDIR').elementValue);
+                    const wdsd = parseFloat(e.weatherElement.find(element => element.elementName === 'WDSD').elementValue);
+                    const pres = parseFloat(e.weatherElement.find(element => element.elementName === 'PRES').elementValue);
+                    let precipitation = parseFloat(e.weatherElement.find(element => element.elementName === 'H_24R').elementValue);
+                    precipitation = precipitation < 0 ? 0 : precipitation
+                    return { name, city, town, elev, weather, lat, lon, tempe, wdir, wdsd, pres, precipitation };
                 });
             })
             .catch(error => {
@@ -92,8 +160,9 @@
         let heatmapLayer = null
         let temperatureMarkers = [];
         let svgContainer = null
-
-        function toggleD3() {
+        let monthMap = null
+        //顯示風向
+        function toggleWind() {
             clear()
             // 创建 SVG 容器
             svgContainer = d3.select(LMap.getPanes().overlayPane)
@@ -104,7 +173,7 @@
 
             // 创建箭头和线段
             const arrows = svgContainer.selectAll('.arrow')
-                .data(temperatureData)
+                .data(oneDayData)
                 .enter()
                 .append('g')
                 .attr('class', 'arrow');
@@ -140,10 +209,10 @@
             // 监听地图缩放事件，更新箭头位置
             LMap.on('zoomend', updateArrows);
         }
-
-        function toggleTempMap() {
+        // 顯示各站點資訊
+        function toggleMap() {
             clear()
-            temperatureData.forEach(dataPoint => {
+            oneDayData.forEach(dataPoint => {
                 marker = L.circleMarker([dataPoint.lat, dataPoint.lon], {
                     radius: 5,
                     color: 'red',
@@ -152,32 +221,32 @@
                 }).addTo(LMap);
 
                 // 添加气温信息的弹出窗口
-                marker.bindPopup(`Temperature: ${dataPoint.temperature} °C`);
+                marker.bindPopup(`測站名稱: ${dataPoint.name} <br> 所在區域: ${dataPoint.city},${dataPoint.town} <br>
+                海拔：${dataPoint.elev} m<br> 溫度：${dataPoint.tempe} °C<br> 降雨量：${dataPoint.precipitation} mm<br>
+                目前天氣： ${dataPoint.weather}`);
                 temperatureMarkers.push(marker);
             });
         }
-
-        // 顯示降雨量
-        function toggleRainMap() {
+        // 顯示雨量
+        function toggleRain() {
             clear()
             const option = {
                 "scaleRadius": false,
                 "radius": 50,
-                "useLocalExtrema": true,
+                "useLocalExtrema": false,
                 latField: 'lat',
                 lngField: 'lon',
-                valueField: 'value',
+                valueField: 'precipitation',
                 "maxOpacity": .5
             };
             heatmapLayer = new HeatmapOverlay(option);
             const testData = {
                 max: 100,
-                data: arr
+                data: oneDayData
             };
             heatmapLayer.setData(testData);
             heatmapLayer.addTo(LMap);
         }
-
         // 清除之前圖層
         function clear() {
             if (heatmapLayer) {
@@ -194,6 +263,131 @@
                 svgContainer.remove();
                 svgContainer = null;
             }
+            if (monthMap) {
+                monthMap.remove()
+                monthMap = null
+            }
+        }
+        // noUISlider
+        const dateSlider = document.getElementById('slider');
+        function timestamp(str) {
+            return new Date(str).getTime();
+        }
+        // 創建slider
+        function buildSlider() {
+            noUiSlider.create(dateSlider, {
+                // Create two timestamps to define a range.
+                range: {
+                    min: timestamp(monthDate.startTime),
+                    max: timestamp(monthDate.endTime)
+                },
+                // Steps of one day
+                step: 24 * 60 * 60 * 1000,
+                // Two more timestamps indicate the handle starting positions.
+                start: [timestamp(monthDate.startTime)],
+            });
+            // 顯示當下日期
+            var dateValues = [
+                document.getElementById('date'),
+            ];
+            var formatter = new Intl.DateTimeFormat('en-GB', {
+                dateStyle: 'full'
+            });
+            dateSlider.noUiSlider.on('update', function (values, handle) {
+                dateValues[handle].innerHTML = formatter.format(new Date(+values[handle]));
+                const currentDate = new Date(+values[handle]);
+                const year = currentDate.getFullYear();
+                const month = String(currentDate.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以要加1，然后使用padStart方法补零
+                const day = String(currentDate.getDate()).padStart(2, '0'); // 使用padStart方法补零
+                const formattedDate = `${year}-${month}-${day}`;
+                // 根据天数索引更新地图样式
+                updateMapStyle(formattedDate);
+            });
+            updateMapStyle(timestamp(monthDate.startTime));
+        }
+        // 月份資料顯示
+        function updateMapStyle(dayIndex) {
+            clear();
+            geoData.features.forEach(feature => {
+                const coordinates = feature.geometry.coordinates;
+
+                monthData.forEach(data => {
+                    const lat = parseFloat(data.lat);
+                    const lon = parseFloat(data.lon);
+
+                    // 使用d3.geoContains来判断座标点是否在行政区范围内
+                    if (d3.geoContains(feature, [lon, lat])) {
+                        // 获取行政区对应的气候数据
+                        const temperatureData = data.tempData.find(t => t.Date === dayIndex);
+                        const date = temperatureData.Date;
+                        const maximum = parseFloat(temperatureData.Maximum);
+                        const mean = parseFloat(temperatureData.Mean);
+                        const minimum = parseFloat(temperatureData.Minimum);
+
+                        // 添加气温数据到 feature 的属性中
+                        feature.properties.temperature = mean;
+                    }
+                })
+            });
+            createTemp(dayIndex)
+        }
+        function createTemp(dayIndex) {
+            // 存储气温数据的数组
+            const temperatureData = [];
+            // 遍历行政区数据，获取气温数据并添加到数组中
+            geoData.features.forEach(feature => {
+                const meanTemperature = feature.properties.temperature;
+                temperatureData.push(meanTemperature);
+            });
+
+            // 创建色块条形图
+            const barContainer = d3.select('#temperature-bar');
+            const barWidth = 20;
+            const barHeight = 100;
+
+            const xScale = d3.scaleLinear()
+                .domain([0, temperatureData.length])
+                .range([0, barWidth * temperatureData.length]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(temperatureData)])
+                .range([0, barHeight]);
+            barContainer.selectAll('rect')
+                .data(temperatureData)
+                .enter()
+                .append('rect')
+                .attr('x', (d, i) => xScale(i))
+                .attr('y', (d) => barHeight - yScale(d))
+                .attr('width', barWidth)
+                .attr('height', (d) => yScale(d))
+                .attr('fill', (d) => {
+                    const colorScale = d3.scaleLinear()
+                        .domain([0, 40]) // 根据需求自定义温度范围
+                        .range(['#ffffcc', '#800026']); // 颜色范围根据需要自定义
+                    return colorScale(d);
+                });
+            // 更新地理数据的样式
+            monthMap = L.geoJSON(geoData, {
+                style: function (feature) {
+                    const meanTemperature = feature.properties.temperature;
+                    const colorScale = d3.scaleLinear()
+                        .domain([0, 40]) // 根据需求自定义温度范围
+                        .range(['#ffffcc', '#800026']); // 颜色范围根据需要自定义
+
+                    return {
+                        fillColor: colorScale(meanTemperature),
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        fillOpacity: 0.7
+                    };
+                },
+                onEachFeature: function (feature, layer) {
+                    const meanTemperature = feature.properties.temperature;
+                    layer.bindPopup(`日期：${dayIndex}<br> 平均温度：${meanTemperature} °C`);
+                }
+            })
+            monthMap.addTo(LMap);
         }
 
     </script>
