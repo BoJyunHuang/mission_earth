@@ -20,24 +20,6 @@
         #arrow-container {
             z-index: 1001;
         }
-
-        #slider {
-            height: 10px;
-            margin-top: 5px;
-        }
-
-        #slider .noUi-connect {
-            background: #c0392b;
-        }
-
-        #slider .noUi-handle {
-            height: 18px;
-            width: 18px;
-            top: -5px;
-            right: -9px;
-            /* half the width */
-            border-radius: 9px;
-        }
     </style>
 </head>
 
@@ -219,7 +201,28 @@
                     const y = point.y;
                     return `translate(${x},${y}) rotate(${d.wdir})`;
                 });
+                //   goRight()
             }
+            // 動畫
+            //function goRight() {
+            //  arrows.attr('transform', d => {
+            //    const latLng = L.latLng(d.lat, d.lon);
+            //  const point = LMap.latLngToLayerPoint(latLng);
+            //const x = point.x;
+            //const y = point.y;
+            //return `translate(${x},${y}) rotate(${d.wdir})`;
+            //})
+            //  .transition()
+            //.duration(1000) // 設定動畫的持續時間（以毫秒為單位）
+            //.attr('transform', d => {
+            //  const latLng = L.latLng(d.lat, d.lon);
+            //const point = LMap.latLngToLayerPoint(latLng);
+            //const x = point.x + 10; // 向右移動的距離（例如 +10）
+            //const y = point.y;
+            //return `translate(${x},${y}) rotate(${d.wdir})`;
+            // })
+            //.on("end", goRight);
+            // }
 
             // 初始化箭头位置
             updateArrows();
@@ -389,6 +392,48 @@
     }
 
     p {
+        font-size: 20px;
         margin: 4px 0;
+    }
+
+    button {
+        -webkit-border-radius: 20;
+        -moz-border-radius: 20;
+        border-radius: 20px;
+        font-family: Arial;
+        color: white;
+        font-size: 20px;
+        background: #3498db;
+        padding: 2px 8px 2px 8px;
+        text-decoration: none;
+    }
+
+    button:hover {
+        background: #9fc5e8;
+        background-image: -webkit-linear-gradient(top, #9fc5e8, #2986cc);
+        background-image: -moz-linear-gradient(top, #9fc5e8, #2986cc);
+        background-image: -ms-linear-gradient(top, #9fc5e8, #2986cc);
+        background-image: -o-linear-gradient(top, #9fc5e8, #2986cc);
+        background-image: linear-gradient(to bottom, #9fc5e8, #2986cc);
+        text-decoration: none;
+    }
+
+    #slider {
+        height: 10px;
+        margin-top: 15px;
+        cursor: pointer;
+    }
+
+    #slider .noUi-connects {
+        background: aqua;
+    }
+
+    #slider .noUi-handle {
+        height: 18px;
+        width: 18px;
+        top: -5px;
+        right: -9px;
+        /* half the width */
+        border-radius: 9px;
     }
 </style>
