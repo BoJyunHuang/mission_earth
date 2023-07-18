@@ -28,6 +28,7 @@
     <div id="arrow-container"></div>
     <div class="absolute">
         <p>單日資料</p>
+        <p id="nowaday"></p>
         <div>
             <button id="tempButton" onclick="toggleMap()">測站資訊</button>
             <button id="rainButton" onclick="toggleRain()">雨量</button>
@@ -131,7 +132,8 @@
 
         // 下載無人測站數據
         let oneDayData = []
-        fetch('weather.json')
+        // fetch('weather.json')
+        fetch('https://opendata.cwb.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=CWB-620CE123-D3D7-4A29-9DD3-C4AD6A0E982F')
             .then(response => response.json())
             .then(data => {
                 oneDayData = data.records.location.map(e => {
@@ -150,6 +152,7 @@
                     precipitation = precipitation < 0 ? 0 : precipitation
                     return { name, city, town, elev, weather, lat, lon, tempe, wdir, wdsd, pres, precipitation };
                 });
+                document.getElementById('nowaday').innerHTML = data.records.location[0].time.obsTime
             })
             .catch(error => {
                 console.error('Error loading JSON:', error);
@@ -178,12 +181,6 @@
                 .append('g')
                 .attr('class', 'arrow');
 
-            arrows.append('path')
-                .attr('d', 'M0,-5L10,0L0,5')
-                .attr('stroke', 'red')
-                .attr('fill', 'red')
-                .attr('stroke-width', d => d.wdsd); // 使用 size 属性控制箭头的大小
-
             arrows.append('line')
                 .attr('x1', 0)
                 .attr('y1', 0)
@@ -191,6 +188,14 @@
                 .attr('y2', 0)
                 .attr('stroke', 'red')
                 .attr('stroke-width', d => d.wdsd); // 使用 size 属性控制线段的大小
+
+            // 获取线段的总长度
+            var lineLengths = [];
+            arrows.each(function (d, i) {
+                var line = d3.select(this).select("line");
+                var lineLength = Math.sqrt(Math.pow(line.attr("x2") - line.attr("x1"), 2) + Math.pow(line.attr("y2") - line.attr("y1"), 2));
+                lineLengths.push(lineLength);
+            });
 
             // 更新箭头位置和旋转角度
             function updateArrows() {
@@ -201,34 +206,36 @@
                     const y = point.y;
                     return `translate(${x},${y}) rotate(${d.wdir})`;
                 });
-                //   goRight()
+                animate();
             }
-            // 動畫
-            //function goRight() {
-            //  arrows.attr('transform', d => {
-            //    const latLng = L.latLng(d.lat, d.lon);
-            //  const point = LMap.latLngToLayerPoint(latLng);
-            //const x = point.x;
-            //const y = point.y;
-            //return `translate(${x},${y}) rotate(${d.wdir})`;
-            //})
-            //  .transition()
-            //.duration(1000) // 設定動畫的持續時間（以毫秒為單位）
-            //.attr('transform', d => {
-            //  const latLng = L.latLng(d.lat, d.lon);
-            //const point = LMap.latLngToLayerPoint(latLng);
-            //const x = point.x + 10; // 向右移動的距離（例如 +10）
-            //const y = point.y;
-            //return `translate(${x},${y}) rotate(${d.wdir})`;
-            // })
-            //.on("end", goRight);
-            // }
 
+            // 定义动画函数
+            function animate() {
+                arrows.each(function (d, i) {
+                    var line = d3.select(this).select("line");
+                    var lineLength = lineLengths[i];
+                    line.attr("stroke-dasharray", lineLength + " " + lineLength)
+                        .attr("stroke-dashoffset", -lineLength)
+                        .transition()
+                        .duration(1000)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", 0)
+                        .transition()
+                        .duration(1000)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", lineLength)
+                });
+                // 定时器，每隔一段时间执行动画
+                d3.interval(function () {
+                    animate();
+                }, 2000); // 每隔3秒执行一次动画
+
+            }
             // 初始化箭头位置
             updateArrows();
-
+            animate();
             // 监听地图缩放事件，更新箭头位置
-            LMap.on('zoomend', updateArrows);
+            LMap.on('zoomend', updateArrows, animate);
         }
 
         // 顯示各站點資訊
