@@ -3,6 +3,7 @@
 
 <head>
     <title>Weather Map</title>
+    <meta charset="UTF-8">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="nouislider.min.css" />
     <style>
@@ -42,6 +43,7 @@
         </div>
         <div id="slider"></div>
         <p id="date"></p>
+        <button onclick="executeScript()">下載氣候圖檔</button>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
@@ -360,6 +362,21 @@
                 }
             })
             monthMap.addTo(LMap);
+        }
+
+        // 執行py檔
+        function executeScript() {
+            fetch('/execute_script')
+                .then(response => {
+                    if (response.ok) {
+                        console.log('脚本执行成功！');
+                    } else {
+                        console.error('脚本执行失败！');
+                    }
+                })
+                .catch(error => {
+                    console.error('发生错误：', error);
+                });
         }
     </script>
 
