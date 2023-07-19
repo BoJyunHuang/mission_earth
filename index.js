@@ -24,6 +24,6 @@ app.get('/execute_script', (req, res) => {
 });
 
 // 設置靜態文件目錄
-app.listen(8080, () => {
-    console.log('Server is running on http://localhost:8080');
+app.listen(3000, () => {
+    console.log('Server is running on http://localhost:3000');
 });
